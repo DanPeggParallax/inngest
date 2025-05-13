@@ -46,6 +46,7 @@ import (
 	"github.com/inngest/inngest/pkg/execution/history"
 	"github.com/inngest/inngest/pkg/execution/queue"
 	"github.com/inngest/inngest/pkg/execution/ratelimit"
+	"github.com/inngest/inngest/pkg/execution/realtime"
 	"github.com/inngest/inngest/pkg/execution/runner"
 	"github.com/inngest/inngest/pkg/execution/state"
 	"github.com/inngest/inngest/pkg/execution/state/redis_state"
@@ -313,6 +314,8 @@ func start(ctx context.Context, opts StartOpts) error {
 		return fmt.Errorf("failed to create publisher: %w", err)
 	}
 
+	broadcaster := realtime.NewInProcessBroadcaster()
+
 	exec, err := executor.NewExecutor(
 		executor.WithHTTPClient(httpClient),
 		executor.WithStateManager(smv2),
@@ -322,6 +325,7 @@ func start(ctx context.Context, opts StartOpts) error {
 		),
 		executor.WithExpressionAggregator(agg),
 		executor.WithQueue(rq),
+		executor.WithRealtimePublisher(broadcaster),
 		executor.WithLogger(logger.From(ctx)),
 		executor.WithFunctionLoader(loader),
 		executor.WithLifecycleListeners(
@@ -448,6 +452,8 @@ func start(ctx context.Context, opts StartOpts) error {
 			JobQueueReader:     ds.Queue.(queue.JobQueueReader),
 			Executor:           ds.Executor,
 			QueueShardSelector: shardSelector,
+			Broadcaster:        broadcaster,
+			RealtimeJWTSecret: []byte(*sk),
 		})
 	})
 
@@ -479,7 +485,7 @@ func start(ctx context.Context, opts StartOpts) error {
 			ConnectManager:             connectionManager,
 			ConnectResponseNotifier:    apiConnectProxy,
 			ConnectRequestStateManager: connectionManager,
-			Signer:                     auth.NewJWTSessionTokenSigner(consts.DevServerConnectJwtSecret),
+			Signer:                     auth.NewJWTSessionTokenSigner([]byte(*sk)),
 			RequestAuther:              ds,
 			ConnectGatewayRetriever:    ds,
 			EntitlementProvider:        ds,
@@ -503,7 +509,7 @@ func start(ctx context.Context, opts StartOpts) error {
 	connGateway := connect.NewConnectGatewayService(
 		connect.WithConnectionStateManager(connectionManager),
 		connect.WithRequestReceiver(gatewayRequestReceiver),
-		connect.WithGatewayAuthHandler(auth.NewJWTAuthHandler(consts.DevServerConnectJwtSecret)),
+		connect.WithGatewayAuthHandler(auth.NewJWTAuthHandler([]byte(*sk))),
 		connect.WithDev(),
 		connect.WithGatewayPublicPort(opts.ConnectGatewayPort),
 		connect.WithApiBaseUrl(fmt.Sprintf("http://%s:%d", opts.Config.CoreAPI.Addr, opts.Config.CoreAPI.Port)),
