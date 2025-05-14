@@ -87,6 +87,8 @@ type StartOpts struct {
 	EventKey []string `json:"event_key"`
 
 	ConnectGatewayPort int `json:"connect-gateway-port"`
+
+	RealtimeJWTSecret []byte `json:"realtime-jwt-secret"`
 }
 
 // Create and start a new dev server.  The dev server is used during (surprise surprise)
@@ -453,7 +455,7 @@ func start(ctx context.Context, opts StartOpts) error {
 			Executor:           ds.Executor,
 			QueueShardSelector: shardSelector,
 			Broadcaster:        broadcaster,
-			RealtimeJWTSecret: []byte(*sk),
+			RealtimeJWTSecret:  opts.RealtimeJWTSecret,
 		})
 	})
 
@@ -485,7 +487,7 @@ func start(ctx context.Context, opts StartOpts) error {
 			ConnectManager:             connectionManager,
 			ConnectResponseNotifier:    apiConnectProxy,
 			ConnectRequestStateManager: connectionManager,
-			Signer:                     auth.NewJWTSessionTokenSigner([]byte(*sk)),
+			Signer:                     auth.NewJWTSessionTokenSigner(opts.RealtimeJWTSecret),
 			RequestAuther:              ds,
 			ConnectGatewayRetriever:    ds,
 			EntitlementProvider:        ds,
@@ -509,7 +511,7 @@ func start(ctx context.Context, opts StartOpts) error {
 	connGateway := connect.NewConnectGatewayService(
 		connect.WithConnectionStateManager(connectionManager),
 		connect.WithRequestReceiver(gatewayRequestReceiver),
-		connect.WithGatewayAuthHandler(auth.NewJWTAuthHandler([]byte(*sk))),
+		connect.WithGatewayAuthHandler(auth.NewJWTAuthHandler(opts.RealtimeJWTSecret)),
 		connect.WithDev(),
 		connect.WithGatewayPublicPort(opts.ConnectGatewayPort),
 		connect.WithApiBaseUrl(fmt.Sprintf("http://%s:%d", opts.Config.CoreAPI.Addr, opts.Config.CoreAPI.Port)),
